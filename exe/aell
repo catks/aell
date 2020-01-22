@@ -101,7 +101,7 @@ end.parse!
 verify_options!(options)
 
 servers = options[:hosts] || get_servers_ips(options[:access_key_id], options[:secret_access_key], options[:region], options[:tag])
-puts servers
+
 begin
   Thread.report_on_exception = false
   Net::SSH::Multi.start do |session|
