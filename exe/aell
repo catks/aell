@@ -40,7 +40,7 @@ def get_servers_ips(access_key_id, secret_access_key, region, tags)
         values: values
       }]
     })
-  .collect { |i| i.private_ip_address }
+  .collect { |i| i.private_ip_address }.compact
 end
 
 options = {
@@ -101,7 +101,7 @@ end.parse!
 verify_options!(options)
 
 servers = options[:hosts] || get_servers_ips(options[:access_key_id], options[:secret_access_key], options[:region], options[:tag])
-
+puts servers
 begin
   Thread.report_on_exception = false
   Net::SSH::Multi.start do |session|
