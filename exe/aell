@@ -1,0 +1,117 @@
+require 'net/ssh/multi'
+require 'optparse'
+require 'aell/version'
+require 'aws-sdk-ec2'
+
+AWS_ACCESS_KEY_ID = ENV['AWS_ACCESS_KEY_ID']
+AWS_SECRET_ACCESS_KEY = ENV['AWS_SECRET_ACCESS_KEY']
+AWS_REGION = ENV['AWS_REGION']
+
+def verify_options!(options)
+u error('Error: Missing user "-u my_user"') unless options[:user]
+  error('Error: Missing tag "-t some_tag:example" or hosts "-h 10.0.0.1,my_domain.intra"') unless options[:tag] || options[:hosts]
+  error('Error: Missing command "-c some_command"') unless options[:command]
+  error('Error: Missing AWS_ACCESS_KEY_ID, set with AWS_ACCESS_KEY_ID environment variable or with  "--access_key_id my_key"') unless options[:access_key_id] || options[:hosts]
+  error('Error: Missing AWS_SECRET_ACCESS_KEY, set with AWS_SECRET_ACCESS_KEY environment variable or with  "--secret_access_key my_key"') unless options[:secret_access_key] || options[:hosts]
+  error('Error: Missing AWS_REGION, set with AWS_REGION environment variable or with  "--region region"') unless options[:region] || options[:hosts]
+end
+
+def error(message)
+  $stderr.puts message
+  exit 1
+end
+
+def parse_tags(tags)
+  tag, values = tags.split(':')
+  parsed_values = values.split(',')
+
+  [tag, parsed_values]
+end
+
+def get_servers_ips(access_key_id, secret_access_key, region, tags)
+  tag, values = parse_tags(tags)
+
+  ec2_client = Aws::EC2::Client.new(access_key_id: access_key_id, secret_access_key: secret_access_key, region: region)
+  ec2 = Aws::EC2::Resource.new(client: ec2_client)
+  ec2.instances({
+    filters:
+      [{
+        name: "tag:#{tag}",
+        values: values
+      }]
+    })
+  .collect { |i| i.private_ip_address }
+end
+
+options = {
+  access_key_id: AWS_ACCESS_KEY_ID,
+  secret_access_key: AWS_SECRET_ACCESS_KEY,
+  region: AWS_REGION
+}
+
+OptionParser.new do |opts|
+  opts.banner = <<-BANNER
+Aell - Run commands in multiple servers querying by your AWS Infrastructure
+
+Usage: aell -t some_tag:some_value -u ssh_user -c some_command
+
+BANNER
+
+  opts.on("-t", "--tag TAG",
+          "AWS tags to search servers(you can specify more than one value with `,`)") do |tag|
+    options[:tag] = tag
+  end
+
+  opts.on("--hosts 'some.domain,10.0.0.1'",
+          "specify the hosts to run the command(Separated by `,`)") do |hosts|
+    options[:hosts] = hosts.split(',')
+  end
+
+  opts.on("-c", "--command COMMAND", "Command to run in the servers") do |command|
+    options[:command] = command
+  end
+
+  opts.on("-u", "--user USER", "User to connect in the servers") do |user|
+    options[:user] = user
+  end
+
+  opts.on("-v", "--version", "Shows aell version") do
+    puts Aell::VERSION
+    exit
+  end
+
+  opts.on("--access_key_id ACCESS_KEY_ID", "Sets the AWS ACCESS_KEY_ID") do |access_key_id|
+    options[:access_key_id] = access_key_id
+  end
+
+  opts.on("--secret_access_key SECRET_ACCESS_KEY", "Sets the AWS SECRET_ACCESS_KEY") do |secret_access_key|
+    options[:secret_access_key] = secret_access_key
+  end
+
+  opts.on("--region REGION", "Sets the REGION") do |region|
+    options[:region] = region
+  end
+
+  opts.on_tail("-h", "--help", "Show this message") do
+    puts opts
+    exit
+  end
+end.parse!
+
+verify_options!(options)
+
+servers = options[:hosts] || get_servers_ips(options[:access_key_id], options[:secret_access_key], options[:region], options[:tag])
+
+begin
+  Thread.report_on_exception = false
+  Net::SSH::Multi.start do |session|
+    servers.each do |server|
+      session.use(options[:user] ? "#{options[:user]}@#{server}" : server)
+    end
+
+    session.exec options[:command]
+  end
+
+rescue Net::SSH::ConnectionTimeout => e
+  error("Error: Can't connect to hosts #{servers}")
+end
