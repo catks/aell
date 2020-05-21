@@ -27,7 +27,7 @@ export AWS_REGION=aws_region(eg: us-east-1)
 Or set with the aell options in each command:
 
 ```bash
-aell - Application:some-app -u deploy-user --access_key_id access_key_id --secret_access_key secret_access_key --region us-east-1 -c 'echo "Hello Aell"'
+aell -t Application:some-app -u deploy-user --access_key_id access_key_id --secret_access_key secret_access_key --region us-east-1 -c 'echo "Hello Aell"'
 ```
 Aell use AWS tags to query the servers with the `-t`/ `--tag` flags, to know more just type `aell -h`
 
