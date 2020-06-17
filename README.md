@@ -22,6 +22,9 @@ To start using aell you need a `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and 
 export AWS_ACCESS_KEY_ID=my_access_key
 export AWS_SECRET_ACCESS_KEY=secret_access_key
 export AWS_REGION=aws_region(eg: us-east-1)
+
+# OPTIONAL (when using MFA)
+export AWS_SESSION_TOKEN=secret_session_token
 ```
 
 Or set with the aell options in each command:
@@ -29,13 +32,20 @@ Or set with the aell options in each command:
 ```bash
 aell -t Application:some-app -u deploy-user --access_key_id access_key_id --secret_access_key secret_access_key --region us-east-1 -c 'echo "Hello Aell"'
 ```
+
+Aell can also use aws configuration in ~/.aws/, or use a specific profile with `--profile` option, eg:
+
+
+```bash
+aell --profile my_other_profile -t Application:some-app -u deploy-user -c 'echo "Hello Aell"'
+```
+
 Aell use AWS tags to query the servers with the `-t`/ `--tag` flags, to know more just type `aell -h`
 
 ## TODO
 
- 1. Configure a Docker image
- 2. Separate concerns
- 3. Add specs
+ 1. Separate concerns
+ 2. Add specs
 
 ## Contributing
 
