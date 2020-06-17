@@ -6,18 +6,18 @@ require 'aws-sdk-ec2'
 AWS_ACCESS_KEY_ID = ENV['AWS_ACCESS_KEY_ID']
 AWS_SECRET_ACCESS_KEY = ENV['AWS_SECRET_ACCESS_KEY']
 AWS_REGION = ENV['AWS_REGION']
+AWS_SESSION_TOKEN = ENV['AWS_SESSION_TOKEN']
+
+Signal.trap("INT") { exit 2 }
 
 def verify_options!(options)
-u error('Error: Missing user "-u my_user"') unless options[:user]
-  error('Error: Missing tag "-t some_tag:example" or hosts "-h 10.0.0.1,my_domain.intra"') unless options[:tag] || options[:hosts]
-  error('Error: Missing command "-c some_command"') unless options[:command]
-  error('Error: Missing AWS_ACCESS_KEY_ID, set with AWS_ACCESS_KEY_ID environment variable or with  "--access_key_id my_key"') unless options[:access_key_id] || options[:hosts]
-  error('Error: Missing AWS_SECRET_ACCESS_KEY, set with AWS_SECRET_ACCESS_KEY environment variable or with  "--secret_access_key my_key"') unless options[:secret_access_key] || options[:hosts]
-  error('Error: Missing AWS_REGION, set with AWS_REGION environment variable or with  "--region region"') unless options[:region] || options[:hosts]
+  error('Missing user "-u my_user"') unless options[:user]
+  error('Missing tag "-t some_tag:example" or hosts "-h 10.0.0.1,my_domain.intra"') unless options[:tag] || options[:hosts]
+  error('Missing command "-c some_command"') unless options[:command]
 end
 
 def error(message)
-  $stderr.puts message
+  $stderr.puts "[ERROR] #{message}"
   exit 1
 end
 
@@ -28,26 +28,37 @@ def parse_tags(tags)
   [tag, parsed_values]
 end
 
-def get_servers_ips(access_key_id, secret_access_key, region, tags)
-  tag, values = parse_tags(tags)
-
-  ec2_client = Aws::EC2::Client.new(access_key_id: access_key_id, secret_access_key: secret_access_key, region: region)
+def get_servers_ips(tag:, **aws_options)
+  tag_name, values = parse_tags(tag)
+  ec2_client = Aws::EC2::Client.new(**aws_options.compact)
   ec2 = Aws::EC2::Resource.new(client: ec2_client)
   ec2.instances({
     filters:
       [{
-        name: "tag:#{tag}",
+        name: "tag:#{tag_name}",
         values: values
       }]
     })
   .collect { |i| i.private_ip_address }.compact
+
+rescue Aws::EC2::Errors::AuthFailure, Aws::Errors::Unauthorized => ex
+  error(ex.message)
+rescue Interrupt
+  exit 2
 end
 
 options = {
   access_key_id: AWS_ACCESS_KEY_ID,
   secret_access_key: AWS_SECRET_ACCESS_KEY,
-  region: AWS_REGION
+  session_token: AWS_SESSION_TOKEN,
+  region: AWS_REGION,
 }
+
+class Hash
+  def except(*keys)
+    self.reject { |k,v| keys.include?(k) }
+  end
+end
 
 OptionParser.new do |opts|
   opts.banner = <<-BANNER
@@ -92,6 +103,15 @@ BANNER
     options[:region] = region
   end
 
+  opts.on("--profile PROFILE", "Sets the profile (using ~/.aws/credentials), overrides --access_key_id, --secret_access_key, --region, --session_token options and environment variables") do |profile|
+    options[:profile] = profile
+    options.reject! { |k, v| [:access_key_id, :secret_access_key, :region, :session_token].include?(k) }
+  end
+
+  opts.on("--session-token SESSION_TOKEN ", "Sets the session token when using AWS MFA") do |session_token|
+    options[:session_token] = session_token
+  end
+
   opts.on_tail("-h", "--help", "Show this message") do
     puts opts
     exit
@@ -100,7 +120,7 @@ end.parse!
 
 verify_options!(options)
 
-servers = options[:hosts] || get_servers_ips(options[:access_key_id], options[:secret_access_key], options[:region], options[:tag])
+servers = options[:hosts] || get_servers_ips(**options.except(:user, :hosts, :command))
 
 begin
   Thread.report_on_exception = false
