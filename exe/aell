@@ -41,7 +41,7 @@ def get_servers_ips(tag:, **aws_options)
     })
   .collect { |i| i.private_ip_address }.compact
 
-rescue Aws::EC2::Errors::AuthFailure, Aws::Errors::Unauthorized => ex
+rescue Aws::EC2::Errors::ServiceError => ex
   error(ex.message)
 rescue Interrupt
   exit 2
