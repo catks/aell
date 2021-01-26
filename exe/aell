@@ -52,6 +52,7 @@ options = {
   secret_access_key: AWS_SECRET_ACCESS_KEY,
   session_token: AWS_SESSION_TOKEN,
   region: AWS_REGION,
+  verify_host_key: :never,
 }
 
 class Hash
@@ -84,6 +85,14 @@ BANNER
 
   opts.on("-u", "--user USER", "User to connect in the servers") do |user|
     options[:user] = user
+  end
+
+  opts.on("--single", "Only runs in one host") do
+    options[:single] = true
+  end
+
+  opts.on("--verify-host-key HOST_VERIFICATION", "Check host key when connecting (never, accept_new_or_local_tunnel, accept_new or always), default: never") do |host_verification|
+    options[:verify_host_key] = host_verification.to_sym
   end
 
   opts.on("-v", "--version", "Shows aell version") do
@@ -120,13 +129,17 @@ end.parse!
 
 verify_options!(options)
 
-servers = options[:hosts] || get_servers_ips(**options.except(:user, :hosts, :command))
+servers = options[:hosts] || get_servers_ips(**options.except(:user, :hosts, :command, :single, :verify_host_key))
+
+servers = [servers.first] if options[:single]
 
 begin
   Thread.report_on_exception = false
   Net::SSH::Multi.start do |session|
     servers.each do |server|
-      session.use(options[:user] ? "#{options[:user]}@#{server}" : server)
+      connection = options[:user] ? "#{options[:user]}@#{server}" : server
+
+      session.use(connection, verify_host_key: options[:verify_host_key])
     end
 
     session.exec options[:command]
