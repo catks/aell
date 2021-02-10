@@ -20,11 +20,11 @@ To start using aell you need a `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and 
 
 ```bash
 export AWS_ACCESS_KEY_ID=my_access_key
-export AWS_SECRET_ACCESS_KEY=secret_access_key
-export AWS_REGION=aws_region(eg: us-east-1)
+export AWS_SECRET_ACCESS_KEY=my_secret_access_key
+export AWS_REGION=my_aws_region # (eg: us-east-1)
 
 # OPTIONAL (when using MFA)
-export AWS_SESSION_TOKEN=secret_session_token
+export AWS_SESSION_TOKEN=my_secret_session_token
 ```
 
 Or set with the aell options in each command:
